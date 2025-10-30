@@ -1,0 +1,40 @@
+# Core dependencies
+pyaudio>=0.2.13
+numpy>=1.24.0
+
+# Speech recognition and wake word detection
+SpeechRecognition>=3.10.0
+pvporcupine>=3.0.0  # Wake word detection
+vosk>=0.3.45  # Offline speech recognition alternative
+
+# AI Assistant APIs
+anthropic>=0.18.0
+openai>=1.0.0
+
+# Camera
+picamera2>=0.3.0  # For Raspberry Pi camera
+
+# Computer vision
+opencv-python>=4.8.0
+pytesseract>=0.3.10  # OCR for text recognition
+Pillow>=10.0.0
+
+# Audio playback
+pygame>=2.5.0  # For audio playback
+pydub>=0.25.0
+
+# Bluetooth
+pybluez>=0.23  # Bluetooth connectivity
+
+# Text-to-speech
+pyttsx3>=2.90
+gTTS>=2.4.0
+elevenlabs>=0.2.27  # Premium natural voices
+
+# Web/API
+flask>=3.0.0
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
