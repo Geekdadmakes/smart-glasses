@@ -1,0 +1,78 @@
+# Smart Glasses Configuration
+
+# Audio Settings
+audio:
+  sample_rate: 16000
+  channels: 1
+  chunk_size: 1024
+  mic_device_index: null  # null for default, or specify device index
+  speaker_device_index: null
+
+# Wake Word Settings
+wake_word:
+  enabled: true
+  method: "porcupine"  # Options: "porcupine" (recommended), "energy" (testing), "vosk" (offline)
+  keyword: "hey glasses"  # See wake_word.py for available keywords
+  sensitivity: 0.5  # 0.0 to 1.0, higher = more sensitive
+
+# Speech Recognition
+speech:
+  engine: "vosk"  # Options: "vosk" (offline), "google" (online)
+  language: "en-US"
+  timeout: 5  # seconds to wait for speech
+  phrase_time_limit: 10  # max seconds for a phrase
+
+# AI Assistant
+assistant:
+  provider: "anthropic"  # Options: "anthropic", "openai"
+  model: "claude-3-5-sonnet-20241022"  # or "gpt-4" for OpenAI
+  api_key_env: "ANTHROPIC_API_KEY"  # Environment variable name
+  max_tokens: 1024
+  temperature: 0.7
+
+  # Personality & Behavior
+  personality: "friendly"  # Options: "friendly", "professional", "witty", "jarvis", "casual"
+  name: "Jarvis"  # Assistant's name
+  use_tools: true  # Enable tool calling (camera, timers, etc.)
+
+  # Memory
+  memory_directory: "./memory"  # Where to store conversation history and preferences
+
+# Camera Settings
+camera:
+  resolution:
+    width: 1920
+    height: 1080
+  photo_format: "jpg"
+  video_format: "h264"
+  photos_directory: "./photos"
+  videos_directory: "./videos"
+
+# Text-to-Speech
+tts:
+  engine: "elevenlabs"  # Options: "pyttsx3" (offline), "gtts" (online), "elevenlabs" (premium)
+  rate: 150  # Words per minute (pyttsx3 only)
+  volume: 0.9  # 0.0 to 1.0
+
+# Bluetooth
+bluetooth:
+  enabled: true
+  device_name: "Smart Glasses"
+  auto_connect: true
+  paired_devices_file: "./config/paired_devices.json"
+
+# Computer Vision
+vision:
+  object_detection: false  # Enable when ready
+  ocr: false  # Enable when ready
+  face_recognition: false  # Enable when ready
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "./logs/smart_glasses.log"
+
+# System
+system:
+  low_power_mode: false
+  led_indicators: true
