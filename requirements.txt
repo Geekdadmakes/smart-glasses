@@ -24,7 +24,7 @@ pygame>=2.5.0  # For audio playback
 pydub>=0.25.0
 
 # Bluetooth
-pybluez>=0.23  # Bluetooth connectivity
+# Note: We use bluetoothctl commands via subprocess, no Python library needed
 
 # Text-to-speech
 pyttsx3>=2.90
