@@ -10,7 +10,7 @@ import base64
 from datetime import datetime
 from pathlib import Path
 from anthropic import Anthropic
-import openai
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,7 @@ class AIAssistant:
         if self.provider == 'anthropic' and self.api_key:
             self.client = Anthropic(api_key=self.api_key)
         elif self.provider == 'openai' and self.api_key:
-            openai.api_key = self.api_key
-            self.client = openai
+            self.client = OpenAI(api_key=self.api_key)
 
         # Tool managers
         self.camera_manager = camera_manager
@@ -74,7 +73,7 @@ class AIAssistant:
         self.system_prompt = self._build_system_prompt()
 
         # Initialize tools
-        if self.use_tools and self.provider == 'anthropic':
+        if self.use_tools:
             self._initialize_tools()
 
         logger.info(f"AI Assistant initialized - provider: {self.provider}, model: {self.model}, personality: {self.personality}")
@@ -624,9 +623,9 @@ Remember: You're worn on glasses, so you literally see what the user sees and ca
                 return description
 
             elif self.provider == 'openai':
-                # Use GPT-4 Vision
-                response = openai.ChatCompletion.create(
-                    model="gpt-4-vision-preview",
+                # Use GPT-4o Vision (new 1.0+ format)
+                response = self.client.chat.completions.create(
+                    model=self.model,  # Use gpt-4o which has vision
                     messages=[
                         {
                             "role": "user",
@@ -648,6 +647,7 @@ Remember: You're worn on glasses, so you literally see what the user sees and ca
                 )
 
                 description = response.choices[0].message.content
+                logger.info(f"Vision analysis complete: {description[:100]}...")
                 return description
 
             else:
@@ -658,17 +658,46 @@ Remember: You're worn on glasses, so you literally see what the user sees and ca
             return f"Sorry, I couldn't analyze the image: {str(e)}"
 
     def process_openai(self, user_input):
-        """Process using OpenAI GPT API"""
+        """Process using OpenAI GPT API with vision support"""
         try:
-            # Build messages with system prompt
+            # Check if this is a vision-related command
+            vision_keywords = ['what am i looking at', 'what do you see', 'describe what',
+                             'read this', 'what does this say', 'what is this object',
+                             'what is this', 'identify this']
+
+            is_vision_command = any(keyword in user_input.lower() for keyword in vision_keywords)
+
+            if is_vision_command and self.camera_manager:
+                # Handle vision commands directly
+                logger.info("Detected vision command, using camera")
+                photo_path = self.camera_manager.take_photo()
+
+                # Determine the type of vision request
+                if 'read' in user_input.lower():
+                    question = "Read all visible text in this image. If there's no text, say 'No text visible'."
+                elif 'identify' in user_input.lower() or 'what is this' in user_input.lower():
+                    question = "Identify the main object in this image and provide information about it."
+                else:
+                    question = "Describe what you see in this image in detail."
+
+                # Analyze image
+                description = self._analyze_image_with_vision(photo_path, question)
+
+                # Update history
+                self.conversation_history.append({"role": "user", "content": user_input})
+                self.conversation_history.append({"role": "assistant", "content": description})
+
+                return description
+
+            # Regular text conversation
             messages = [
                 {"role": "system", "content": self.system_prompt}
             ] + self.conversation_history + [
                 {"role": "user", "content": user_input}
             ]
 
-            # Call OpenAI API
-            response = self.client.ChatCompletion.create(
+            # Call OpenAI API (new 1.0+ format)
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 max_tokens=self.max_tokens,
