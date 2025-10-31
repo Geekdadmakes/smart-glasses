@@ -50,7 +50,7 @@ camera:
 
 # Text-to-Speech
 tts:
-  engine: "elevenlabs"  # Options: "pyttsx3" (offline), "gtts" (online), "elevenlabs" (premium)
+  engine: "gtts"  # Options: "pyttsx3" (offline), "gtts" (online), "elevenlabs" (premium)
   rate: 150  # Words per minute (pyttsx3 only)
   volume: 0.9  # 0.0 to 1.0
 
