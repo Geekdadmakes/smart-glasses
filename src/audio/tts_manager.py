@@ -4,6 +4,7 @@ Text-to-Speech Manager - Enhanced TTS with multiple voice options
 
 import os
 import logging
+import subprocess
 import pyttsx3
 from pathlib import Path
 
@@ -154,7 +155,6 @@ class TTSManager:
         """Speak using Google TTS (requires internet)"""
         try:
             from gtts import gTTS
-            import pygame
             import tempfile
 
             logger.info(f"Speaking (gTTS): {text}")
@@ -167,17 +167,10 @@ class TTSManager:
             tts = gTTS(text=text, lang='en', slow=False)
             tts.save(temp_file)
 
-            # Play audio
-            pygame.mixer.init()
-            pygame.mixer.music.load(temp_file)
-            pygame.mixer.music.play()
-
-            # Wait for completion
-            while pygame.mixer.music.get_busy():
-                pygame.time.Clock().tick(10)
+            # Play audio using mpg123 (more reliable on Pi)
+            subprocess.run(['mpg123', '-q', temp_file], check=False)
 
             # Cleanup
-            pygame.mixer.quit()
             os.remove(temp_file)
 
         except Exception as e:
@@ -189,7 +182,7 @@ class TTSManager:
         """Speak using ElevenLabs API (premium)"""
         try:
             from elevenlabs import generate, play, set_api_key, Voice, VoiceSettings
-            import pygame
+            import tempfile
 
             # Get API key
             api_key = os.getenv('ELEVENLABS_API_KEY')
@@ -220,23 +213,15 @@ class TTSManager:
                 model="eleven_monolingual_v1"  # or eleven_multilingual_v2 for other languages
             )
 
-            # Play audio using pygame
-            import tempfile
+            # Save audio to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
                 temp_file = fp.name
                 fp.write(audio)
 
-            # Play the audio
-            pygame.mixer.init()
-            pygame.mixer.music.load(temp_file)
-            pygame.mixer.music.play()
-
-            # Wait for completion
-            while pygame.mixer.music.get_busy():
-                pygame.time.Clock().tick(10)
+            # Play audio using mpg123 (more reliable on Pi)
+            subprocess.run(['mpg123', '-q', temp_file], check=False)
 
             # Cleanup
-            pygame.mixer.quit()
             os.remove(temp_file)
 
         except ImportError:
