@@ -690,9 +690,17 @@ Remember: You're worn on glasses, so you literally see what the user sees and ca
                 return description
 
             # Regular text conversation
+            # Normalize conversation history to ensure all content is strings
+            normalized_history = []
+            for msg in self.conversation_history:
+                normalized_history.append({
+                    "role": msg["role"],
+                    "content": str(msg["content"])  # Ensure it's a string
+                })
+
             messages = [
                 {"role": "system", "content": self.system_prompt}
-            ] + self.conversation_history + [
+            ] + normalized_history + [
                 {"role": "user", "content": user_input}
             ]
 
