@@ -24,9 +24,9 @@ speech:
 
 # AI Assistant
 assistant:
-  provider: "anthropic"  # Options: "anthropic", "openai"
-  model: "claude-3-haiku-20240307"  # or "gpt-4" for OpenAI
-  api_key_env: "ANTHROPIC_API_KEY"  # Environment variable name
+  provider: "openai"  # Options: "anthropic", "openai"
+  model: "gpt-4o"  # gpt-4o has vision built-in!
+  api_key_env: "OPENAI_API_KEY"  # Environment variable name
   max_tokens: 1024
   temperature: 0.7
 
