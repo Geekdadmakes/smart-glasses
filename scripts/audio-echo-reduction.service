@@ -1,0 +1,13 @@
+[Unit]
+Description=WM8960 Audio HAT Echo Reduction Configuration
+After=sound.target alsa-restore.service
+Wants=sound.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/geekdad/smart-glasses/scripts/configure_audio_echo_reduction.sh
+RemainAfterExit=yes
+User=geekdad
+
+[Install]
+WantedBy=multi-user.target

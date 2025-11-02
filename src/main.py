@@ -20,6 +20,7 @@ from audio.speech_recognition import SpeechRecognizer
 from assistant.ai_assistant import AIAssistant
 from camera.camera_manager import CameraManager
 from bluetooth.bluetooth_manager import BluetoothManager
+from connection.connection_manager import ConnectionManager
 
 # Load environment variables
 load_dotenv()
@@ -67,9 +68,32 @@ class SmartGlasses:
             bluetooth_manager=self.bluetooth_manager
         )
 
+        # iOS Companion App - Connection Manager (BLE + WiFi)
+        logger.info("Initializing iOS companion app connection manager...")
+        managers_dict = {
+            'audio_manager': self.audio_manager,
+            'tts_manager': self.tts_manager,
+            'camera_manager': self.camera_manager,
+            'bluetooth_manager': self.bluetooth_manager,
+            'ai_assistant': self.ai_assistant,
+            'wake_word_detector': self.wake_word_detector,
+            'speech_recognizer': self.speech_recognizer
+        }
+
+        # Add productivity manager and other managers if available
+        if hasattr(self.ai_assistant, 'productivity_manager'):
+            managers_dict['productivity_manager'] = self.ai_assistant.productivity_manager
+        if hasattr(self.ai_assistant, 'security_manager'):
+            managers_dict['security_manager'] = self.ai_assistant.security_manager
+
+        self.connection_manager = ConnectionManager(managers=managers_dict)
+
         # State
         self.running = False
         self.listening = False
+        self.active_mode = False  # True = always listening, False = wake word only
+        self.last_activity_time = time.time()
+        self.sleep_timeout = 60  # seconds of inactivity before returning to sleep
 
         logger.info("Smart Glasses initialized successfully")
 
@@ -90,6 +114,10 @@ class SmartGlasses:
         self.running = True
 
         try:
+            # Start iOS companion app connection manager (BLE + WiFi)
+            logger.info("Starting iOS companion app servers...")
+            self.connection_manager.start()
+
             # Play startup sound
             self.audio_manager.play_startup_sound()
 
@@ -104,41 +132,77 @@ class SmartGlasses:
             self.stop()
 
     def run_main_loop(self):
-        """Main application loop"""
+        """Main application loop with SLEEP and ACTIVE modes"""
         logger.info("Entering main loop - listening for wake word...")
 
         while self.running:
             try:
-                # Listen for wake word
-                if self.wake_word_detector.detect():
-                    logger.info("Wake word detected!")
-                    self.audio_manager.play_activation_sound()
+                if not self.active_mode:
+                    # SLEEP MODE: Wait for wake word
+                    logger.debug("SLEEP mode - listening for wake word...")
+                    if self.wake_word_detector.detect():
+                        logger.info("Wake word detected! Entering ACTIVE mode...")
+                        self.active_mode = True
+                        self.last_activity_time = time.time()
+                        self.audio_manager.speak("I'm listening")
+                        # Continue to active mode
+                    # Small delay in sleep mode
+                    time.sleep(0.1)
+                    continue  # Loop back to check wake word again
 
-                    # Process voice command
-                    self.process_voice_command()
+                if self.active_mode:
+                    # ACTIVE MODE: Continuously listen for commands
+                    # Check for sleep timeout
+                    if time.time() - self.last_activity_time > self.sleep_timeout:
+                        logger.info("Sleep timeout reached, returning to SLEEP mode")
+                        self.active_mode = False
+                        self.audio_manager.speak("Going to sleep")
+                        logger.info("Returning to SLEEP mode - wake word listening active")
+                        continue
 
-                # Small delay to prevent CPU overload
-                time.sleep(0.1)
+                    # Listen for any speech
+                    command = self.speech_recognizer.listen()
+
+                    if command:
+                        self.last_activity_time = time.time()
+                        self.process_voice_command(command)
+
+                    # Small delay
+                    time.sleep(0.2)
 
             except Exception as e:
                 logger.error(f"Error in main loop: {e}", exc_info=True)
                 time.sleep(1)
 
-    def process_voice_command(self):
-        """Process a voice command after wake word detection"""
+    def process_voice_command(self, command):
+        """Process a voice command"""
         try:
-            # Listen for command
-            logger.info("Listening for command...")
-            command = self.speech_recognizer.listen()
-
             if not command:
-                logger.info("No command heard")
-                self.audio_manager.play_error_sound()
                 return
 
             logger.info(f"Command received: {command}")
 
-            # Check for special commands first
+            # Strip wake word if present
+            wake_words = ['computer', 'hey glasses', 'hey jarvis', 'jarvis']
+            command_lower = command.lower()
+            for wake_word in wake_words:
+                if command_lower.startswith(wake_word):
+                    command = command[len(wake_word):].strip()
+                    logger.info(f"Stripped wake word, command is now: {command}")
+                    break
+
+            if not command:
+                return
+
+            # Check for sleep commands
+            sleep_phrases = ['go to sleep', 'sleep mode', 'stop listening', 'goodbye', 'goodnight']
+            if any(phrase in command_lower for phrase in sleep_phrases):
+                logger.info("Sleep command detected")
+                self.active_mode = False
+                self.audio_manager.speak("Going to sleep. Say the wake word to wake me.", blocking=True)
+                return
+
+            # Check for special commands
             if self.handle_special_command(command):
                 return
 
@@ -146,12 +210,38 @@ class SmartGlasses:
             logger.info("Processing with AI assistant...")
             response = self.ai_assistant.process(command)
 
-            # Speak the response
-            self.audio_manager.speak(response)
+            # Speak the response (non-blocking for interruption)
+            self.audio_manager.speak(response, blocking=False)
+
+            # Monitor for interruptions while speaking
+            self.listen_for_interruption()
 
         except Exception as e:
             logger.error(f"Error processing voice command: {e}", exc_info=True)
-            self.audio_manager.speak("Sorry, I encountered an error.")
+            self.audio_manager.speak("Sorry, I encountered an error.", blocking=True)
+
+    def listen_for_interruption(self):
+        """Listen for speech while TTS is playing and interrupt if detected"""
+        while self.audio_manager.is_speaking:
+            try:
+                # Quick check for speech (short timeout)
+                command = self.speech_recognizer.listen()
+
+                if command:
+                    # Speech detected - interrupt!
+                    logger.info(f"Interruption detected: {command}")
+                    self.audio_manager.stop_speaking()
+                    self.last_activity_time = time.time()
+
+                    # Process the new command
+                    self.process_voice_command(command)
+                    break
+
+            except Exception as e:
+                logger.debug(f"Error during interruption check: {e}")
+
+            # Small delay before next check
+            time.sleep(0.1)
 
     def handle_special_command(self, command):
         """Handle special commands like taking photos, etc."""
@@ -160,23 +250,23 @@ class SmartGlasses:
         # Photo command
         if "take a photo" in command_lower or "take photo" in command_lower:
             logger.info("Taking photo...")
-            self.audio_manager.speak("Taking photo")
+            self.audio_manager.speak("Taking photo", blocking=True)
             photo_path = self.camera_manager.take_photo()
-            self.audio_manager.speak(f"Photo saved")
+            self.audio_manager.speak(f"Photo saved", blocking=True)
             return True
 
         # Video command
         elif "record video" in command_lower or "start recording" in command_lower:
             logger.info("Recording video...")
-            self.audio_manager.speak("Recording video")
+            self.audio_manager.speak("Recording video", blocking=True)
             video_path = self.camera_manager.record_video(duration=10)
-            self.audio_manager.speak("Video saved")
+            self.audio_manager.speak("Video saved", blocking=True)
             return True
 
         # Shutdown command
         elif "shutdown" in command_lower or "turn off" in command_lower:
             logger.info("Shutdown requested")
-            self.audio_manager.speak("Shutting down")
+            self.audio_manager.speak("Shutting down", blocking=True)
             self.stop()
             return True
 
@@ -188,6 +278,9 @@ class SmartGlasses:
         self.running = False
 
         # Cleanup
+        if hasattr(self, 'connection_manager'):
+            logger.info("Stopping iOS companion app servers...")
+            self.connection_manager.stop()
         if hasattr(self, 'audio_manager'):
             self.audio_manager.cleanup()
         if hasattr(self, 'wake_word_detector'):

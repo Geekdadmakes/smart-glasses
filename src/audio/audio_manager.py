@@ -5,6 +5,7 @@ Audio Manager - Handles audio input/output for the smart glasses
 import pyaudio
 import logging
 import pyttsx3
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,10 @@ class AudioManager:
             self.tts_engine = pyttsx3.init()
             self.tts_engine.setProperty('rate', 150)
             self.tts_engine.setProperty('volume', 0.9)
+
+        # Track TTS playback state
+        self.is_speaking = False
+        self.speak_thread = None
 
         logger.info("Audio Manager initialized")
 
@@ -65,17 +70,45 @@ class AudioManager:
             logger.error(f"Failed to open output stream: {e}")
             return None
 
-    def speak(self, text):
+    def speak(self, text, blocking=False):
         """Convert text to speech and play it"""
         try:
             logger.info(f"Speaking: {text}")
+
+            if blocking:
+                # Blocking mode - wait for speech to finish
+                self._speak_blocking(text)
+            else:
+                # Non-blocking mode - run in thread for interruption
+                self.stop_speaking()  # Stop any ongoing speech first
+                self.is_speaking = True
+                self.speak_thread = threading.Thread(target=self._speak_blocking, args=(text,))
+                self.speak_thread.daemon = True
+                self.speak_thread.start()
+
+        except Exception as e:
+            logger.error(f"TTS error: {e}")
+            self.is_speaking = False
+
+    def _speak_blocking(self, text):
+        """Internal method to speak (blocking)"""
+        try:
             if self.tts_manager:
                 self.tts_manager.speak(text)
             else:
                 self.tts_engine.say(text)
                 self.tts_engine.runAndWait()
-        except Exception as e:
-            logger.error(f"TTS error: {e}")
+        finally:
+            self.is_speaking = False
+
+    def stop_speaking(self):
+        """Stop current speech playback"""
+        if self.is_speaking and self.tts_manager:
+            logger.info("Interrupting speech...")
+            self.tts_manager.stop_speaking()
+            self.is_speaking = False
+            if self.speak_thread:
+                self.speak_thread.join(timeout=0.5)
 
     def play_startup_sound(self):
         """Play startup sound"""
@@ -101,6 +134,10 @@ class AudioManager:
     def cleanup(self):
         """Cleanup audio resources"""
         logger.info("Cleaning up audio manager")
+
+        # Stop any ongoing speech
+        self.stop_speaking()
+
         if self.tts_manager:
             self.tts_manager.cleanup()
         elif hasattr(self, 'tts_engine'):

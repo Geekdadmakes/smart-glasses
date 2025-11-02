@@ -26,6 +26,9 @@ class TTSManager:
         self.engine = None
         self._initialize_engine()
 
+        # Track current playback process for interruption
+        self.current_playback_process = None
+
         logger.info(f"TTS Manager initialized - engine: {self.engine_type}, personality: {personality}")
 
     def _initialize_engine(self):
@@ -167,8 +170,16 @@ class TTSManager:
             tts = gTTS(text=text, lang='en', slow=False)
             tts.save(temp_file)
 
-            # Play audio using mpg123 (more reliable on Pi)
-            subprocess.run(['mpg123', '-q', temp_file], check=False)
+            # Play audio using mpg123 - use Popen so we can interrupt
+            self.current_playback_process = subprocess.Popen(
+                ['mpg123', '-q', temp_file],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            # Wait for completion
+            self.current_playback_process.wait()
+            self.current_playback_process = None
 
             # Cleanup
             os.remove(temp_file)
@@ -280,9 +291,26 @@ class TTSManager:
             return voices
         return []
 
+    def stop_speaking(self):
+        """Stop current speech playback"""
+        if self.current_playback_process:
+            try:
+                self.current_playback_process.terminate()
+                self.current_playback_process.wait(timeout=1)
+                self.current_playback_process = None
+                logger.info("Speech playback interrupted")
+                return True
+            except Exception as e:
+                logger.error(f"Error stopping playback: {e}")
+        return False
+
     def cleanup(self):
         """Cleanup TTS resources"""
         logger.info("Cleaning up TTS manager")
+
+        # Stop any ongoing playback
+        self.stop_speaking()
+
         if self.engine and self.engine_type == 'pyttsx3':
             try:
                 self.engine.stop()

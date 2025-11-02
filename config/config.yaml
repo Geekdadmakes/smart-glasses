@@ -19,8 +19,8 @@ wake_word:
 speech:
   engine: "vosk"  # Options: "vosk" (offline), "google" (online)
   language: "en-US"
-  timeout: 5  # seconds to wait for speech
-  phrase_time_limit: 10  # max seconds for a phrase
+  timeout: 1  # seconds to wait for speech to START (short for continuous listening)
+  phrase_time_limit: 8  # max seconds for entire phrase
 
 # AI Assistant
 assistant:
@@ -52,7 +52,7 @@ camera:
 tts:
   engine: "gtts"  # Options: "pyttsx3" (offline), "gtts" (online), "elevenlabs" (premium)
   rate: 150  # Words per minute (pyttsx3 only)
-  volume: 0.9  # 0.0 to 1.0
+  volume: 0.6  # 0.0 to 1.0 (reduced for echo cancellation)
 
 # Bluetooth
 bluetooth:
