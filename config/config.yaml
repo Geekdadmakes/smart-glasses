@@ -61,6 +61,15 @@ bluetooth:
   auto_connect: true
   paired_devices_file: "./config/paired_devices.json"
 
+# Display (1.8" LCD HUD)
+display:
+  enabled: true
+  brightness: 80  # 0-100
+  timeout: 30  # seconds before auto-sleep (0 = never)
+  rotation: 0  # 0, 90, 180, 270 degrees
+  captions: true  # Show live transcription captions
+  notifications: true  # Show notifications on HUD
+
 # Computer Vision
 vision:
   object_detection: false  # Enable when ready

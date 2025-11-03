@@ -21,6 +21,8 @@ from assistant.ai_assistant import AIAssistant
 from camera.camera_manager import CameraManager
 from bluetooth.bluetooth_manager import BluetoothManager
 from connection.connection_manager import ConnectionManager
+from display.display_manager import DisplayManager
+from display.hud_overlay import HUDOverlay
 
 # Load environment variables
 load_dotenv()
@@ -58,6 +60,21 @@ class SmartGlasses:
         )
         self.speech_recognizer = SpeechRecognizer(self.config['speech'])
         self.camera_manager = CameraManager(self.config['camera'])
+
+        # Display/HUD (1.8" LCD)
+        self.display_manager = None
+        self.hud_overlay = None
+        if self.config.get('display', {}).get('enabled', False):
+            try:
+                logger.info("Initializing HUD display...")
+                self.display_manager = DisplayManager(self.config['display'])
+                self.hud_overlay = HUDOverlay(self.display_manager, self.config['display'])
+                logger.info("HUD display initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize display (continuing without HUD): {e}")
+                self.display_manager = None
+                self.hud_overlay = None
+
         self.bluetooth_manager = BluetoothManager(
             self.config.get('bluetooth', {}),
             camera_manager=self.camera_manager
@@ -77,7 +94,9 @@ class SmartGlasses:
             'bluetooth_manager': self.bluetooth_manager,
             'ai_assistant': self.ai_assistant,
             'wake_word_detector': self.wake_word_detector,
-            'speech_recognizer': self.speech_recognizer
+            'speech_recognizer': self.speech_recognizer,
+            'display_manager': self.display_manager,
+            'hud_overlay': self.hud_overlay
         }
 
         # Add productivity manager and other managers if available
@@ -135,6 +154,10 @@ class SmartGlasses:
         """Main application loop with SLEEP and ACTIVE modes"""
         logger.info("Entering main loop - listening for wake word...")
 
+        # Show initial status on HUD
+        if self.hud_overlay:
+            self.hud_overlay.show_sleep_mode()
+
         while self.running:
             try:
                 if not self.active_mode:
@@ -144,6 +167,11 @@ class SmartGlasses:
                         logger.info("Wake word detected! Entering ACTIVE mode...")
                         self.active_mode = True
                         self.last_activity_time = time.time()
+
+                        # Show wake on HUD
+                        if self.hud_overlay:
+                            self.hud_overlay.wake_from_sleep()
+
                         self.audio_manager.speak("I'm listening")
                         # Continue to active mode
                     # Small delay in sleep mode
@@ -157,14 +185,28 @@ class SmartGlasses:
                         logger.info("Sleep timeout reached, returning to SLEEP mode")
                         self.active_mode = False
                         self.audio_manager.speak("Going to sleep")
+
+                        # Show sleep mode on HUD
+                        if self.hud_overlay:
+                            self.hud_overlay.show_sleep_mode()
+
                         logger.info("Returning to SLEEP mode - wake word listening active")
                         continue
+
+                    # Check display timeout
+                    if self.display_manager:
+                        self.display_manager.check_timeout()
 
                     # Listen for any speech
                     command = self.speech_recognizer.listen()
 
                     if command:
                         self.last_activity_time = time.time()
+
+                        # Show listening mode on HUD
+                        if self.hud_overlay:
+                            self.hud_overlay.show_listening_mode()
+
                         self.process_voice_command(command)
 
                     # Small delay
@@ -194,12 +236,21 @@ class SmartGlasses:
             if not command:
                 return
 
+            # Show user command as caption
+            if self.hud_overlay:
+                self.hud_overlay.show_caption(f"You: {command}")
+
             # Check for sleep commands
             sleep_phrases = ['go to sleep', 'sleep mode', 'stop listening', 'goodbye', 'goodnight']
             if any(phrase in command_lower for phrase in sleep_phrases):
                 logger.info("Sleep command detected")
                 self.active_mode = False
                 self.audio_manager.speak("Going to sleep. Say the wake word to wake me.", blocking=True)
+
+                # Show sleep mode on HUD
+                if self.hud_overlay:
+                    self.hud_overlay.show_sleep_mode()
+
                 return
 
             # Check for special commands
@@ -210,11 +261,20 @@ class SmartGlasses:
             logger.info("Processing with AI assistant...")
             response = self.ai_assistant.process(command)
 
+            # Show AI response as caption
+            if self.hud_overlay:
+                self.hud_overlay.show_ai_response(response, streaming=True)
+
             # Speak the response (non-blocking for interruption)
             self.audio_manager.speak(response, blocking=False)
 
             # Monitor for interruptions while speaking
             self.listen_for_interruption()
+
+            # Clear caption after response
+            if self.hud_overlay:
+                time.sleep(2)  # Let user read the response
+                self.hud_overlay.clear_caption()
 
         except Exception as e:
             logger.error(f"Error processing voice command: {e}", exc_info=True)
@@ -252,6 +312,11 @@ class SmartGlasses:
             logger.info("Taking photo...")
             self.audio_manager.speak("Taking photo", blocking=True)
             photo_path = self.camera_manager.take_photo()
+
+            # Show photo capture on HUD
+            if self.hud_overlay:
+                self.hud_overlay.show_photo_capture()
+
             self.audio_manager.speak(f"Photo saved", blocking=True)
             return True
 
@@ -259,7 +324,17 @@ class SmartGlasses:
         elif "record video" in command_lower or "start recording" in command_lower:
             logger.info("Recording video...")
             self.audio_manager.speak("Recording video", blocking=True)
+
+            # Show recording indicator on HUD
+            if self.hud_overlay:
+                self.hud_overlay.show_video_recording(True)
+
             video_path = self.camera_manager.record_video(duration=10)
+
+            # Hide recording indicator
+            if self.hud_overlay:
+                self.hud_overlay.show_video_recording(False)
+
             self.audio_manager.speak("Video saved", blocking=True)
             return True
 
@@ -287,6 +362,9 @@ class SmartGlasses:
             self.wake_word_detector.cleanup()
         if hasattr(self, 'camera_manager'):
             self.camera_manager.cleanup()
+        if hasattr(self, 'hud_overlay'):
+            logger.info("Cleaning up HUD display...")
+            self.hud_overlay.cleanup()
 
         logger.info("Smart Glasses stopped")
 
